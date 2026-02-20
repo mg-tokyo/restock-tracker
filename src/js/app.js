@@ -179,8 +179,11 @@ function buildItemMetaCache(gameData) {
   // "items" in the API = tools, potions, and other non-shop-inventory items.
   // Track their IDs so we can exclude them from the tracker even if they appear
   // in the DB under the wrong shop_type (historical data artefacts).
+  // Add both singular and plural forms since historical DB entries sometimes differ
+  // (e.g. API key "WateringCan" vs DB item_id "WateringCans").
   for (const itemId of Object.keys(gameData.items ?? {})) {
     toolItemIds.add(itemId);
+    toolItemIds.add(itemId + "s");
   }
 
   // Weather metadata comes from our local WEATHER_META since the API doesn't expose rarity.
