@@ -123,7 +123,8 @@ let isFetching = false;
 let retryCount = 0;
 
 // Game data state — populated by initGameData() on startup.
-const itemMetaCache = new Map(); // key: "shopType:itemId"  value: { name, rarity, price }
+const itemMetaCache = new Map(); // key: "shopType:itemId"  value: { name, rarity, price, spriteUrl? }
+const toolItemIds = new Set();   // item IDs from the API's "items" category (tools, potions, etc.)
 let currentWeatherId = null;     // DB-normalised weather_id currently active, or null
 
 // === Game data helpers ===
@@ -146,6 +147,7 @@ function resolveWeatherId(liveWeatherString) {
 // Weather comes from WEATHER_META (the API has no rarity/duration for weather).
 function buildItemMetaCache(gameData) {
   itemMetaCache.clear();
+  toolItemIds.clear();
 
   for (const [plantId, plantData] of Object.entries(gameData.plants ?? {})) {
     const seed = plantData.seed;
@@ -167,10 +169,18 @@ function buildItemMetaCache(gameData) {
 
   for (const [decorId, decorData] of Object.entries(gameData.decor ?? {})) {
     itemMetaCache.set(`decor:${decorId}`, {
-      name:   decorData.name || decorId,
-      rarity: (decorData.rarity ?? "common").toLowerCase(),
-      price:  decorData.coinPrice ?? 0,
+      name:      decorData.name || decorId,
+      rarity:    (decorData.rarity ?? "common").toLowerCase(),
+      price:     decorData.coinPrice ?? 0,
+      spriteUrl: decorData.sprite || null, // API-provided sprite URL (always up to date)
     });
+  }
+
+  // "items" in the API = tools, potions, and other non-shop-inventory items.
+  // Track their IDs so we can exclude them from the tracker even if they appear
+  // in the DB under the wrong shop_type (historical data artefacts).
+  for (const itemId of Object.keys(gameData.items ?? {})) {
+    toolItemIds.add(itemId);
   }
 
   // Weather metadata comes from our local WEATHER_META since the API doesn't expose rarity.
@@ -239,6 +249,13 @@ function getSpriteUrl(itemId, shopType) {
   }
   if (shopType === "egg") {
     return `https://mg-api.ariedam.fr/assets/sprites/pets/${itemId}.png`;
+  }
+  if (shopType === "decor") {
+    // Prefer the API-provided sprite URL (always current, covers new items like PaperLantern).
+    // Fall back to the local decor-sprites folder for items missing from the API.
+    const meta = itemMetaCache.get(`decor:${itemId}`);
+    if (meta?.spriteUrl) return meta.spriteUrl;
+    return getDecorSpriteUrl(itemId);
   }
   if (shopType === "weather") {
     // Snow is displayed using the Frost icon (game normalises Frost → Snow)
@@ -730,7 +747,7 @@ function renderPredictions() {
       if (!item) return null;
       return predictItem(item);
     })
-    .filter((p) => p !== null)
+    .filter((p) => p !== null && !toolItemIds.has(p.itemId))
     .sort((a, b) => {
       if (a.isEmpty && !b.isEmpty) return 1;
       if (!a.isEmpty && b.isEmpty) return -1;
@@ -773,11 +790,9 @@ function renderPredictions() {
           <div class="restock-pred-row" onclick="toggleTracking('${pred.shopType}', '${pred.itemId}')">
             <div class="restock-pred-left">
               <div class="restock-icon-wrap rarity-${rarity}">
-                ${pred.shopType === "decor"
-            ? `<img src="${getDecorSpriteUrl(pred.itemId)}" loading="lazy" decoding="async" class="restock-item-sprite restock-decor-icon" alt="${getItemName(pred.itemId, pred.shopType)}">`
-            : spriteUrl
-              ? `<img src="${spriteUrl}" data-fallback-src="${spriteUrl}?v=1" loading="lazy" decoding="async" class="restock-item-sprite" alt="${getItemName(pred.itemId, pred.shopType)}">`
-              : ""}
+                ${spriteUrl
+            ? `<img src="${spriteUrl}" data-fallback-src="${spriteUrl}" loading="lazy" decoding="async" class="restock-item-sprite${pred.shopType === "decor" ? " restock-decor-icon" : ""}" alt="${getItemName(pred.itemId, pred.shopType)}">`
+            : ""}
               </div>
               <div class="restock-pred-text">
                 <div class="restock-pred-line1">
@@ -822,6 +837,7 @@ function renderHistory() {
 
   let filtered = historyData.filter((item) => {
     if (item.shopType === "tool") return false;
+    if (toolItemIds.has(item.itemId)) return false; // exclude tools/potions stored under wrong shop_type
     if (currentFilter !== "all" && item.shopType !== currentFilter) return false;
     const expiryMs = getExpiryMs(item.itemId, item.shopType);
     if (expiryMs && expiryMs <= nowMs()) return false;
@@ -940,11 +956,9 @@ function renderHistory() {
                 <td>
                   <div class="restock-item-cell">
                     <div class="restock-icon-wrap rarity-${rarity}">
-                      ${item.shopType === "decor"
-            ? `<img src="${getDecorSpriteUrl(item.itemId)}" loading="lazy" decoding="async" class="restock-item-sprite restock-decor-icon" alt="${getItemName(item.itemId, item.shopType)}">`
-            : spriteUrl
-              ? `<img src="${spriteUrl}" data-fallback-src="${spriteUrl}?v=1" loading="lazy" decoding="async" class="restock-item-sprite" alt="${getItemName(item.itemId, item.shopType)}">`
-              : ""}
+                      ${spriteUrl
+            ? `<img src="${spriteUrl}" data-fallback-src="${spriteUrl}" loading="lazy" decoding="async" class="restock-item-sprite${item.shopType === "decor" ? " restock-decor-icon" : ""}" alt="${getItemName(item.itemId, item.shopType)}">`
+            : ""}
                     </div>
                     <div class="restock-item-info">
                       <div class="restock-item-name restock-text-${rarity}">${getItemName(item.itemId, item.shopType)}</div>
