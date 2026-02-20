@@ -449,7 +449,9 @@ async function loadHistoryData(forceRefresh = false) {
 
     historyData = [];
     if (Array.isArray(data)) {
-      historyData = data.map(row => ({
+      historyData = data
+        .filter(row => row.shop_type !== "tool")
+        .map(row => ({
         itemId: row.item_id,
         shopType: row.shop_type,
         appearanceRate: row.current_probability,
@@ -819,6 +821,7 @@ function renderHistory() {
   const container = document.getElementById("history-table");
 
   let filtered = historyData.filter((item) => {
+    if (item.shopType === "tool") return false;
     if (currentFilter !== "all" && item.shopType !== currentFilter) return false;
     const expiryMs = getExpiryMs(item.itemId, item.shopType);
     if (expiryMs && expiryMs <= nowMs()) return false;
