@@ -1,10 +1,15 @@
-﻿import { CONFIG } from "./config.js";
-import { STATIC_ITEM_DATA } from "./data/static-item-data.js";
+import { CONFIG } from "./config.js";
+import { WEATHER_META, ITEM_EXPIRY } from "./data/static-item-data.js";
 
 const CACHE_KEY = "historyData_restock_v9";
 const REFRESH_LOCK_KEY = `${CACHE_KEY}:refresh-lock`;
 const REFRESH_LOCK_TTL_MS = 5 * 60 * 1000;
 const WAIT_FOR_CACHE_UPDATE_MS = 8000;
+
+const GAME_DATA_CACHE_KEY = "ariedam_game_data_v1";
+const GAME_DATA_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+const LIVE_WEATHER_CACHE_KEY = "ariedam_live_weather_v1";
+const LIVE_WEATHER_CACHE_DURATION = 2 * 60 * 1000; // 2 minutes
 
 function nowMs() {
   return Date.now();
@@ -30,6 +35,16 @@ function getCachedData(key) {
     } catch { }
     return null;
   }
+  return rec.data;
+}
+
+// Like getCachedData but accepts an explicit max-age so different caches can have
+// different TTLs without touching CONFIG.
+function getCachedDataWith(key, maxAgeMs) {
+  const rec = getCacheRecord(key);
+  if (!rec) return null;
+  const age = nowMs() - rec.timestamp;
+  if (age > maxAgeMs) return null;
   return rec.data;
 }
 
@@ -107,6 +122,115 @@ let lastFetchTime = 0;
 let isFetching = false;
 let retryCount = 0;
 
+// Game data state — populated by initGameData() on startup.
+const itemMetaCache = new Map(); // key: "shopType:itemId"  value: { name, rarity, price }
+let currentWeatherId = null;     // DB-normalised weather_id currently active, or null
+
+// === Game data helpers ===
+
+// Convert the live API weather string to the DB-normalised weather_id used throughout the app.
+// Returns null when no special weather is active ("Clear Skies").
+function resolveWeatherId(liveWeatherString) {
+  if (!liveWeatherString) return null;
+  const normalized = liveWeatherString.trim();
+  if (normalized === "Clear Skies" || normalized === "") return null;
+  const ALIASES = {
+    "Frost":      "Snow",      // game enum → DB-normalised name
+    "Amber Moon": "AmberMoon", // display name → DB id
+  };
+  return ALIASES[normalized] ?? normalized;
+}
+
+// Populate itemMetaCache from the /data API response.
+// Seeds use the plant's seed sub-object; eggs and decor are top-level.
+// Weather comes from WEATHER_META (the API has no rarity/duration for weather).
+function buildItemMetaCache(gameData) {
+  itemMetaCache.clear();
+
+  for (const [plantId, plantData] of Object.entries(gameData.plants ?? {})) {
+    const seed = plantData.seed;
+    if (!seed) continue;
+    itemMetaCache.set(`seed:${plantId}`, {
+      name:   seed.name || `${plantId} Seed`,
+      rarity: (seed.rarity ?? "common").toLowerCase(),
+      price:  seed.coinPrice ?? 0,
+    });
+  }
+
+  for (const [eggId, eggData] of Object.entries(gameData.eggs ?? {})) {
+    itemMetaCache.set(`egg:${eggId}`, {
+      name:   eggData.name || eggId,
+      rarity: (eggData.rarity ?? "common").toLowerCase(),
+      price:  eggData.coinPrice ?? 0,
+    });
+  }
+
+  for (const [decorId, decorData] of Object.entries(gameData.decor ?? {})) {
+    itemMetaCache.set(`decor:${decorId}`, {
+      name:   decorData.name || decorId,
+      rarity: (decorData.rarity ?? "common").toLowerCase(),
+      price:  decorData.coinPrice ?? 0,
+    });
+  }
+
+  // Weather metadata comes from our local WEATHER_META since the API doesn't expose rarity.
+  for (const [weatherId, meta] of Object.entries(WEATHER_META)) {
+    itemMetaCache.set(`weather:${weatherId}`, {
+      name:   meta.name,
+      rarity: meta.rarity,
+      price:  0,
+    });
+  }
+}
+
+// Fetch game metadata from the Ariedam API and determine the currently active weather.
+// Uses a 24-hour cache for /data and a 2-minute cache for /live.
+// Falls back to stale cache if the network is unavailable.
+async function initGameData() {
+  // --- /data: item metadata (names, prices, rarities) ---
+  let gameData = getCachedDataWith(GAME_DATA_CACHE_KEY, GAME_DATA_CACHE_DURATION);
+
+  if (!gameData) {
+    try {
+      const res = await fetch("https://mg-api.ariedam.fr/data", {
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.ok) {
+        gameData = await res.json();
+        setCachedData(GAME_DATA_CACHE_KEY, gameData);
+      }
+    } catch {
+      // Network failure: try any stale cached copy
+      const stale = getCacheRecord(GAME_DATA_CACHE_KEY);
+      if (stale?.data) gameData = stale.data;
+    }
+  }
+
+  if (gameData) {
+    buildItemMetaCache(gameData);
+  }
+
+  // --- /live: currently active weather ---
+  let liveWeatherString = getCachedDataWith(LIVE_WEATHER_CACHE_KEY, LIVE_WEATHER_CACHE_DURATION);
+
+  if (liveWeatherString === null) {
+    try {
+      const res = await fetch("https://mg-api.ariedam.fr/live", {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) {
+        const liveData = await res.json();
+        liveWeatherString = liveData.weather ?? null;
+        setCachedData(LIVE_WEATHER_CACHE_KEY, liveWeatherString);
+      }
+    } catch {
+      // currentWeatherId stays null — "Active Now" won't be shown (safe degraded state)
+    }
+  }
+
+  currentWeatherId = resolveWeatherId(liveWeatherString);
+}
+
 // === Sprites ===
 function getSpriteUrl(itemId, shopType) {
   if (shopType === "seed") {
@@ -117,7 +241,7 @@ function getSpriteUrl(itemId, shopType) {
     return `https://mg-api.ariedam.fr/assets/sprites/pets/${itemId}.png`;
   }
   if (shopType === "weather") {
-    // Map Snow -> FrostIcon
+    // Snow is displayed using the Frost icon (game normalises Frost → Snow)
     if (itemId === "Snow") return "./weathericon/FrostIcon.png";
     return `./weathericon/${itemId}Icon.png`;
   }
@@ -193,13 +317,13 @@ function bindPrefetchScroll() {
   });
 }
 
-// === Item meta ===
+// === Item meta (backed by itemMetaCache from the Ariedam API) ===
 function getItemKey(itemId, shopType) {
   return `${shopType}:${itemId}`;
 }
 
 function getItemMeta(itemId, shopType) {
-  return STATIC_ITEM_DATA[getItemKey(itemId, shopType)] || null;
+  return itemMetaCache.get(getItemKey(itemId, shopType)) ?? null;
 }
 
 function getItemName(itemId, shopType) {
@@ -214,12 +338,11 @@ function getRarity(itemId, shopType) {
 
 function getCoinPrice(itemId, shopType) {
   const meta = getItemMeta(itemId, shopType);
-  return meta?.price || 0;
+  return meta?.price ?? 0;
 }
 
 function getExpiryMs(itemId, shopType) {
-  const meta = getItemMeta(itemId, shopType);
-  return meta?.expiryMs ?? null;
+  return ITEM_EXPIRY[getItemKey(itemId, shopType)] ?? null;
 }
 
 // === Theme/UI ===
@@ -287,11 +410,9 @@ async function loadHistoryData(forceRefresh = false) {
   lastFetchTime = nowMs();
 
   try {
-    // Use the new View for server-side advanced predictions
     const predictionsUrl = CONFIG.API_URL.replace("/functions/v1/restock-history", "/rest/v1/restock_predictions?select=*");
     const weatherUrl = CONFIG.API_URL.replace("/functions/v1/restock-history", "/rest/v1/weather_predictions?select=*");
 
-    // Fallback if replace didn't work (e.g. config changed)
     const finalUrl = predictionsUrl.includes("restock_predictions")
       ? predictionsUrl
       : "https://xjuvryjgrjchbhjixwzh.supabase.co/rest/v1/restock_predictions?select=*";
@@ -327,48 +448,38 @@ async function loadHistoryData(forceRefresh = false) {
     const weatherData = await weatherResponse.json().catch(() => []);
 
     historyData = [];
-    // The View returns an array, not { items: ... }
     if (Array.isArray(data)) {
       historyData = data.map(row => ({
         itemId: row.item_id,
         shopType: row.shop_type,
-        // View columns:
-        appearanceRate: row.current_probability, // The Boosted Rate
-        estimatedNextTimestamp: row.estimated_next_timestamp, // The Median-based Estimate
+        appearanceRate: row.current_probability,
+        estimatedNextTimestamp: row.estimated_next_timestamp,
         medianIntervalMs: row.median_interval_ms,
         lastSeen: row.last_seen,
-        // Pass-through columns:
         averageQuantity: row.average_quantity,
         totalQuantity: row.total_quantity,
         totalOccurrences: row.total_occurrences,
       }));
     }
 
-    // Merge weather
     if (Array.isArray(weatherData)) {
       const weatherItems = weatherData.map(row => ({
         itemId: row.weather_id,
         shopType: "weather",
-        appearanceRate: row.appearance_rate,
+        appearanceRate: row.appearance_rate, // rate_per_day value (e.g. 2.4), NOT a 0-1 probability
         estimatedNextTimestamp: row.estimated_next_timestamp,
-        // Use duration from view to determine "Active" state later
-        durationMs: row.duration_ms,
         lastSeen: row.last_seen,
         averageQuantity: null,
         totalQuantity: null,
         totalOccurrences: row.total_occurrences,
-        // Fallback for "Active Now" check logic in frontend if needed
-        medianIntervalMs: row.average_interval_ms
+        medianIntervalMs: row.average_interval_ms,
       }));
       historyData = [...historyData, ...weatherItems];
     }
 
-    // Duplication removed
-
-
     setCachedData(CACHE_KEY, {
       items: historyData,
-      lastUpdated: nowMs(), // View doesn't have meta yet
+      lastUpdated: nowMs(),
     });
 
     document.getElementById("status-text").textContent = `Tracking ${historyData.length} items`;
@@ -450,7 +561,6 @@ function formatETA(estimatedNext) {
   if (!estimatedNext) return "-";
   const diff = estimatedNext - nowMs();
   if (diff <= 0) {
-    // Concise overdue message
     const ms = Math.abs(diff);
     const d = Math.floor(ms / 86400000);
     const h = Math.floor(ms / 3600000);
@@ -479,37 +589,40 @@ function getETAColorClass(estimatedNext) {
   return "restock-eta-far";
 }
 
-function ratePercent(rate) {
-  if (rate === null) return "-";
+// For regular items: rate is a 0-1 probability per shop cycle.
+// For weather: rate is rate_per_day (e.g. 2.4 means ~2.4 events per day).
+function ratePercent(rate, shopType) {
+  if (rate === null || rate === undefined) return "-";
+
+  if (shopType === "weather") {
+    if (!Number.isFinite(rate) || rate <= 0) return "-";
+    const display = rate >= 10 ? Math.round(rate) : rate.toFixed(1);
+    return `${display}/day`;
+  }
+
   if (rate >= 1) return "100%";
   if (rate <= 0) return "0%";
 
   const pct = rate * 100;
-
-  // Logic to prevent rounding to 0% or 100%
   let formatted;
   if (pct > 99) {
-    // Force specific precision for high values to avoid rounding up
-    formatted = pct.toString().slice(0, 5); // Simple truncation for now, or use floor
+    formatted = pct.toString().slice(0, 5);
     if (parseFloat(formatted) >= 100) formatted = "99.99";
   } else if (pct < 0.01) {
     formatted = "< 0.01";
   } else {
-    // Dynamic precision
-    let decimals = 2;
-    if (pct >= 10) decimals = 1;
+    const decimals = pct >= 10 ? 1 : 2;
     formatted = pct.toFixed(decimals);
   }
-
-  // Double check manual clamping
   if (parseFloat(formatted) >= 100) formatted = "99.9";
-  if (parseFloat(formatted) === 0) formatted = "0.01"; // Should be covered by < 0.01 check but safety first
+  if (parseFloat(formatted) === 0) formatted = "0.01";
 
   return `${formatted}%`;
 }
 
-function getRateColorClass(rate) {
-  if (rate === null) return "restock-rate-low";
+function getRateColorClass(rate, shopType) {
+  if (shopType === "weather") return "restock-rate-weather";
+  if (rate === null || rate === undefined) return "restock-rate-low";
   const pct = rate * 100;
   if (pct >= 80) return "restock-rate-high";
   if (pct >= 40) return "restock-rate-mid";
@@ -518,9 +631,9 @@ function getRateColorClass(rate) {
 
 // === Prediction helpers ===
 const SHOP_CYCLE_INTERVALS = {
-  seed: 5 * 60 * 1000,       // 5 minutes
-  egg: 15 * 60 * 1000,       // 15 minutes
-  decor: 60 * 60 * 1000,     // 60 minutes
+  seed: 5 * 60 * 1000,    // 5 minutes
+  egg: 15 * 60 * 1000,    // 15 minutes
+  decor: 60 * 60 * 1000,  // 60 minutes
 };
 
 function clamp01(v) {
@@ -553,9 +666,6 @@ function predictItem(item) {
     };
   }
 
-  // Server-side Logic (Step Boost Model) via View
-  // We trust the DB's values.
-
   return {
     ...item,
     estimatedNextTimestamp: item.estimatedNextTimestamp,
@@ -565,9 +675,21 @@ function predictItem(item) {
   };
 }
 
+// For regular items: uses shop cycle interval to compute how often the item appears.
+// For weather: converts rate_per_day directly to a human-readable interval.
 function formatFrequency(rate, shopType) {
-  if (rate === null || rate <= 0) return "-";
+  if (rate === null || rate === undefined || rate <= 0) return "-";
+
+  if (shopType === "weather") {
+    if (!Number.isFinite(rate)) return "-";
+    const minutesBetween = Math.round(1440 / rate);
+    if (minutesBetween < 60) return `Every ~${minutesBetween}m`;
+    const hours = Math.round(minutesBetween / 60);
+    return `Every ~${hours}h`;
+  }
+
   const interval = SHOP_CYCLE_INTERVALS[shopType];
+  if (!interval) return "-";
   const expectedMs = interval / rate;
   if (rate >= 0.95) return "Every restock";
   const min = Math.round(expectedMs / 60000);
@@ -620,37 +742,44 @@ function renderPredictions() {
       .map((pred) => {
         const rarity = getRarity(pred.itemId, pred.shopType);
         const spriteUrl = getSpriteUrl(pred.itemId, pred.shopType);
+
+        // "Active Now" for weather: compare against the live API's current weather_id.
+        // This is authoritative — no timestamp math needed.
+        const isActiveNow = pred.shopType === "weather"
+          && currentWeatherId !== null
+          && pred.itemId === currentWeatherId;
+
+        const etaLabel = isActiveNow
+          ? "Active Now"
+          : formatETA(pred.estimatedNextTimestamp);
+
+        const etaColorClass = isActiveNow
+          ? "restock-eta-now"
+          : getETAColorClass(pred.estimatedNextTimestamp);
+
+        const freqLine = formatFrequency(pred.appearanceRate, pred.shopType);
         const tooltip = pred.isEmpty
           ? ""
-          : `${formatAvgQty(pred.averageQuantity)}\n${formatFrequency(
-            pred.appearanceRate,
-            pred.shopType
-          )}`;
+          : [
+              pred.shopType !== "weather" ? formatAvgQty(pred.averageQuantity) : "",
+              freqLine !== "-" ? freqLine : "",
+            ]
+            .filter(Boolean)
+            .join("\n");
 
         return `
           <div class="restock-pred-row" onclick="toggleTracking('${pred.shopType}', '${pred.itemId}')">
             <div class="restock-pred-left">
               <div class="restock-icon-wrap rarity-${rarity}">
                 ${pred.shopType === "decor"
-            ? `<img src="${getDecorSpriteUrl(
-              pred.itemId
-            )}" loading="lazy" decoding="async" class="restock-item-sprite restock-decor-icon" alt="${getItemName(
-              pred.itemId,
-              pred.shopType
-            )}">`
+            ? `<img src="${getDecorSpriteUrl(pred.itemId)}" loading="lazy" decoding="async" class="restock-item-sprite restock-decor-icon" alt="${getItemName(pred.itemId, pred.shopType)}">`
             : spriteUrl
-              ? `<img src="${spriteUrl}" data-fallback-src="${spriteUrl}?v=1" loading="lazy" decoding="async" class="restock-item-sprite" alt="${getItemName(
-                pred.itemId,
-                pred.shopType
-              )}">`
+              ? `<img src="${spriteUrl}" data-fallback-src="${spriteUrl}?v=1" loading="lazy" decoding="async" class="restock-item-sprite" alt="${getItemName(pred.itemId, pred.shopType)}">`
               : ""}
               </div>
               <div class="restock-pred-text">
                 <div class="restock-pred-line1">
-                  <span class="restock-item-name restock-text-${rarity}">${getItemName(
-                pred.itemId,
-                pred.shopType
-              )}</span>
+                  <span class="restock-item-name restock-text-${rarity}">${getItemName(pred.itemId, pred.shopType)}</span>
                 </div>
                 <div class="restock-pred-line2">
                   ${pred.isEmpty ? "Not enough data" : `Seen ${formatRelative(pred.lastSeen)}`}
@@ -662,20 +791,14 @@ function renderPredictions() {
             ? '<div class="restock-rate-low">--</div>'
             : `
                 <div class="restock-pred-metric-wrap">
-                  <div class="restock-pred-metric-value restock-eta-value ${getETAColorClass(
-              pred.estimatedNextTimestamp
-            )}">
-                    ${(pred.shopType === 'weather' && pred.lastSeen && (Date.now() - pred.lastSeen < (pred.durationMs || 300000)))
-              ? "Active Now"
-              : formatETA(pred.estimatedNextTimestamp)}
+                  <div class="restock-pred-metric-value restock-eta-value ${etaColorClass}">
+                    ${etaLabel}
                   </div>
                   <div class="restock-pred-metric-label">next</div>
                 </div>
                 <div class="restock-pred-metric-wrap" data-tooltip="${tooltip}">
-                  <div class="restock-pred-metric-value ${getRateColorClass(
-                pred.appearanceRate
-              )}">
-                    ${ratePercent(pred.appearanceRate)}
+                  <div class="restock-pred-metric-value ${getRateColorClass(pred.appearanceRate, pred.shopType)}">
+                    ${ratePercent(pred.appearanceRate, pred.shopType)}
                   </div>
                   <div class="restock-pred-metric-label">rate</div>
                 </div>
@@ -722,14 +845,8 @@ function renderHistory() {
         bVal = shopOrder[b.shopType];
       } else if (sortColumn === "rarity") {
         const rarityWeights = {
-          common: 0,
-          uncommon: 1,
-          rare: 2,
-          legendary: 3,
-          mythic: 4,
-          mythical: 4,
-          divine: 5,
-          celestial: 6,
+          common: 0, uncommon: 1, rare: 2, legendary: 3,
+          mythic: 4, mythical: 4, divine: 5, celestial: 6,
         };
         aVal = rarityWeights[getRarity(a.itemId, a.shopType)];
         bVal = rarityWeights[getRarity(b.itemId, b.shopType)];
@@ -752,14 +869,8 @@ function renderHistory() {
     });
   } else {
     const rarityWeights = {
-      common: 0,
-      uncommon: 1,
-      rare: 2,
-      legendary: 3,
-      mythic: 4,
-      mythical: 4,
-      divine: 5,
-      celestial: 6,
+      common: 0, uncommon: 1, rare: 2, legendary: 3,
+      mythic: 4, mythical: 4, divine: 5, celestial: 6,
     };
     const shopOrder = { seed: 0, egg: 1, decor: 2 };
 
@@ -827,27 +938,16 @@ function renderHistory() {
                   <div class="restock-item-cell">
                     <div class="restock-icon-wrap rarity-${rarity}">
                       ${item.shopType === "decor"
-            ? `<img src="${getDecorSpriteUrl(
-              item.itemId
-            )}" loading="lazy" decoding="async" class="restock-item-sprite restock-decor-icon" alt="${getItemName(
-              item.itemId,
-              item.shopType
-            )}">`
+            ? `<img src="${getDecorSpriteUrl(item.itemId)}" loading="lazy" decoding="async" class="restock-item-sprite restock-decor-icon" alt="${getItemName(item.itemId, item.shopType)}">`
             : spriteUrl
-              ? `<img src="${spriteUrl}" data-fallback-src="${spriteUrl}?v=1" loading="lazy" decoding="async" class="restock-item-sprite" alt="${getItemName(
-                item.itemId,
-                item.shopType
-              )}">`
+              ? `<img src="${spriteUrl}" data-fallback-src="${spriteUrl}?v=1" loading="lazy" decoding="async" class="restock-item-sprite" alt="${getItemName(item.itemId, item.shopType)}">`
               : ""}
                     </div>
                     <div class="restock-item-info">
-                      <div class="restock-item-name restock-text-${rarity}">${getItemName(
-                item.itemId,
-                item.shopType
-              )}</div>
+                      <div class="restock-item-name restock-text-${rarity}">${getItemName(item.itemId, item.shopType)}</div>
                       <div class="restock-item-sub">
-                        ${item.shopType === 'weather'
-            ? ''
+                        ${item.shopType === "weather"
+            ? ""
             : `<span class="restock-price-wrap">
                                <img src="./coin.png" class="restock-coin-icon" alt="Coins">
                                <span>${formatPrice(getCoinPrice(item.itemId, item.shopType))}</span>
@@ -858,7 +958,7 @@ function renderHistory() {
                   </div>
                 </td>
                 <td style="text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; opacity: 0.9;">
-                  ${item.shopType === 'weather' ? (item.totalOccurrences || 0) : formatPrice(item.totalQuantity || 0)}
+                  ${item.shopType === "weather" ? (item.totalOccurrences || 0) : formatPrice(item.totalQuantity || 0)}
                 </td>
                 <td>
                   <div class="restock-time-cell" title="${exact.title}">
@@ -946,9 +1046,8 @@ function loadTrackedItems() {
 // === Init ===
 export async function initApp() {
   loadTrackedItems();
-  await loadHistoryData();
+  await initGameData();     // fetch /data (item metadata) + /live (current weather)
+  await loadHistoryData();  // fetch Supabase restock + weather predictions
   renderPredictions();
   renderHistory();
 }
-
-

@@ -469,6 +469,11 @@ body.theme-light {
   color: #f87171;
 }
 
+/* Weather rate is shown as X/day — use a neutral blue to distinguish from item probabilities */
+.restock-rate-weather {
+  color: #60a5fa;
+}
+
 .restock-pred-metric-wrap[data-tooltip]:hover::after {
   content: attr(data-tooltip);
   position: absolute;
