@@ -393,6 +393,37 @@ if (localStorage.getItem("theme") === "light") {
 }
 
 // === Data load ===
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [2000, 4000, 6000]; // escalating back-off
+
+async function fetchWithRetry(url, opts) {
+  let lastError;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      // Each attempt gets its own abort signal so a timed-out request doesn't
+      // poison later retries.
+      const fetchOpts = { ...opts, signal: AbortSignal.timeout(15000) };
+      const res = await fetch(url, fetchOpts);
+      if (res.ok) return res.json();
+      // 5xx = transient, worth retrying; 4xx = permanent, bail immediately
+      if (res.status < 500) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      lastError = new Error(`HTTP ${res.status}: ${res.statusText}`);
+    } catch (err) {
+      lastError = err;
+      // Don't retry on non-network / non-timeout errors (e.g. bad JSON)
+      if (err.name !== "TimeoutError" && err.name !== "AbortError" && !(lastError.message || "").startsWith("HTTP 5")) {
+        throw err;
+      }
+    }
+    if (attempt < MAX_RETRIES) {
+      const delay = RETRY_DELAYS[attempt] ?? 4000;
+      document.getElementById("status-text").textContent = `Retrying… (${attempt + 1}/${MAX_RETRIES})`;
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw lastError;
+}
+
 async function loadHistoryData(forceRefresh = false) {
   const timeSinceLastFetch = nowMs() - lastFetchTime;
   if (!forceRefresh && timeSinceLastFetch < CONFIG.MIN_REFRESH_INTERVAL) {
@@ -441,31 +472,17 @@ async function loadHistoryData(forceRefresh = false) {
       ? weatherUrl
       : "https://xjuvryjgrjchbhjixwzh.supabase.co/rest/v1/weather_predictions?select=*";
 
-    const [response, weatherResponse] = await Promise.all([
-      fetch(finalUrl, {
-        headers: {
-          apikey: CONFIG.API_KEY,
-          "Authorization": `Bearer ${CONFIG.API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        signal: AbortSignal.timeout(10000),
-      }),
-      fetch(finalWeatherUrl, {
-        headers: {
-          apikey: CONFIG.API_KEY,
-          "Authorization": `Bearer ${CONFIG.API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        signal: AbortSignal.timeout(10000),
-      })
-    ]);
+    const supabaseHeaders = {
+      apikey: CONFIG.API_KEY,
+      "Authorization": `Bearer ${CONFIG.API_KEY}`,
+      "Content-Type": "application/json",
+    };
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    const weatherData = await weatherResponse.json().catch(() => []);
+    const data = await fetchWithRetry(finalUrl, { headers: supabaseHeaders, signal: AbortSignal.timeout(15000) });
+    // Weather is non-critical — single attempt, don't block on failure
+    const weatherData = await fetch(finalWeatherUrl, { headers: supabaseHeaders, signal: AbortSignal.timeout(10000) })
+      .then(r => r.ok ? r.json() : [])
+      .catch(() => []);
 
     historyData = [];
     if (Array.isArray(data)) {
