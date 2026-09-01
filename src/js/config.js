@@ -40,14 +40,3 @@ export const LEGACY_KEYS = [
 export const FETCH_TIMEOUT_MS = 15_000;
 export const MAX_RETRIES = 3;
 export const RETRY_DELAYS_MS = [1000, 2000, 4000];
-
-// Legacy shape consumed by src/js/app.js until Task 18 deletes it.
-export const CONFIG = {
-  API_KEY: SUPABASE_KEY,
-  API_URL: `${SUPABASE_URL}/restock_predictions_mat?select=*`,
-  WEATHER_URL: `${SUPABASE_URL}/weather_predictions?select=*`,
-  CACHE_DURATION: TTL.cache,
-  MIN_REFRESH_INTERVAL: 5 * 60 * 1000,
-  MAX_RETRIES,
-  RETRY_DELAY: 2000,
-};
