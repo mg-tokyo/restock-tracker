@@ -1,0 +1,10 @@
+{
+  "name": "restock-tracker",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"tests/*.test.js\"",
+    "serve": "npx --yes serve -l 8080 ."
+  }
+}
