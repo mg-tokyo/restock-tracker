@@ -1,7 +1,7 @@
 import { CONFIG } from "./config.js";
 import { WEATHER_META, ITEM_EXPIRY } from "./data/static-item-data.js";
 
-const CACHE_KEY = "historyData_restock_v9";
+const CACHE_KEY = "historyData_restock_v10";
 const REFRESH_LOCK_KEY = `${CACHE_KEY}:refresh-lock`;
 const REFRESH_LOCK_TTL_MS = 5 * 60 * 1000;
 const WAIT_FOR_CACHE_UPDATE_MS = 8000;
@@ -461,16 +461,8 @@ async function loadHistoryData(forceRefresh = false) {
   lastFetchTime = nowMs();
 
   try {
-    const predictionsUrl = CONFIG.API_URL.replace("/functions/v1/restock-history", "/rest/v1/restock_predictions?select=*");
-    const weatherUrl = CONFIG.API_URL.replace("/functions/v1/restock-history", "/rest/v1/weather_predictions?select=*");
-
-    const finalUrl = predictionsUrl.includes("restock_predictions")
-      ? predictionsUrl
-      : "https://xjuvryjgrjchbhjixwzh.supabase.co/rest/v1/restock_predictions?select=*";
-
-    const finalWeatherUrl = weatherUrl.includes("weather_predictions")
-      ? weatherUrl
-      : "https://xjuvryjgrjchbhjixwzh.supabase.co/rest/v1/weather_predictions?select=*";
+    const finalUrl = CONFIG.API_URL;
+    const finalWeatherUrl = CONFIG.WEATHER_URL;
 
     const supabaseHeaders = {
       apikey: CONFIG.API_KEY,

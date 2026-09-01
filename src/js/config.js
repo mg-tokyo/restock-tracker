@@ -1,8 +1,8 @@
 export const CONFIG = {
-  API_KEY:
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhqdXZyeWpncmpjaGJoaml4d3poIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxMDYyODMsImV4cCI6MjA4NTY4MjI4M30.MqQCBG-UMR4HYJU44Tz2orHUj9gMgJTMJtxpb_MHeps",
-  API_URL:
-    "https://xjuvryjgrjchbhjixwzh.supabase.co/functions/v1/restock-history",
+  // Supabase publishable key (public by design). The legacy anon JWT was rotated 2026-08-16.
+  API_KEY: "sb_publishable_L1p4vEhYCQq11l4IYtbsBQ_FdLYZsGZ",
+  API_URL: "https://xjuvryjgrjchbhjixwzh.supabase.co/rest/v1/restock_predictions_mat?select=*",
+  WEATHER_URL: "https://xjuvryjgrjchbhjixwzh.supabase.co/rest/v1/weather_predictions?select=*",
   // How long to keep the Supabase prediction data in localStorage before re-fetching.
   CACHE_DURATION: 30 * 60 * 1000,      // 30 minutes
   // Minimum time between fetch attempts (prevents tab-thrash hammering the API).
