@@ -1,64 +1,66 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Magic Garden Restock Tracker</title>
-  <link rel="stylesheet" href="./src/css/app.css">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./src/css/base.css">
+  <link rel="stylesheet" href="./src/css/rows.css">
+  <link rel="stylesheet" href="./src/css/table.css">
   <link rel="icon" href="./coin.png" type="image/png">
 </head>
-
 <body>
-  <div class="header">
-    <div class="header-title">
-      <h1>Magic Garden Restock Tracker</h1>
+  <header class="header">
+    <div class="header-title"><h1>Magic Garden Restock Tracker</h1></div>
+    <div class="header-controls">
+      <button type="button" class="theme-toggle" id="theme-toggle"><span id="theme-icon">☀️</span> Toggle Theme</button>
     </div>
-    <div class="header-controls"> <button class="theme-toggle" onclick="toggleTheme()"> <span id="theme-icon">☀️</span>
-        Toggle Theme </button> </div>
-  </div>
-  <div class="container"> <!-- Status Bar -->
-    <div class="restock-status-bar">
+  </header>
+
+  <main class="container">
+    <section class="restock-status-bar">
       <div class="restock-status-left">
-        <div class="status-indicator"></div> <span id="status-text">Loading...</span>
+        <div class="status-indicator" id="status-dot"></div>
+        <span id="status-text">Loading…</span>
       </div>
-      <div class="restock-status-right" id="last-updated"> Last updated: - </div>
-    </div> <!-- Active Predictions Card -->
-    <div class="restock-card">
-      <div class="card-header" onclick="toggleCard(this)">
-        <h2>Active Predictions</h2> <span class="toggle-icon">▼</span>
+      <div class="restock-status-right">
+        <span id="last-updated"></span>
+        <button type="button" class="refresh-btn" id="refresh-btn" title="Refresh data">Refresh</button>
+        <span class="refresh-budget" id="refresh-budget"></span>
+      </div>
+    </section>
+
+    <section class="restock-toolbar">
+      <div class="filter-group" id="filter-chips"></div>
+      <div class="search-bar"><input type="search" class="search-input" id="search-input" placeholder="Search items…" autocomplete="off"></div>
+    </section>
+
+    <section class="restock-card" id="pinned-card">
+      <div class="card-header" id="pinned-toggle">
+        <h2>Pinned <span class="card-count" id="pinned-count"></span></h2>
+        <span class="toggle-icon">▼</span>
       </div>
       <div class="card-content">
-        <div class="restock-pred-list" id="predictions-list">
-          <div class="empty-state"> Click an item in the History to show next restock estimation </div>
-        </div>
+        <div class="restock-pred-list" id="pinned-body"></div>
       </div>
-    </div> <!-- History Card -->
-    <div class="restock-card">
-      <div class="card-header" onclick="toggleCard(this)">
-        <h2>History</h2> <span class="toggle-icon">▼</span>
+    </section>
+
+    <section class="restock-card" id="history-card">
+      <div class="card-header" id="history-toggle">
+        <h2>History <span class="card-count" id="history-count"></span></h2>
+        <div class="card-header-actions">
+          <button type="button" class="reset-sort-btn" id="reset-sort" hidden title="Back to default shop/catalog order">Default order</button>
+          <span class="toggle-icon">▼</span>
+        </div>
       </div>
       <div class="card-content">
-        <div class="restock-filter-bar">
-          <div class="filter-group"> <button class="filter-btn active" data-filter="all"
-              onclick="setFilter('all')">All</button> <button class="filter-btn" data-filter="seed"
-              onclick="setFilter('seed')">Seeds</button> <button class="filter-btn" data-filter="egg"
-              onclick="setFilter('egg')">Eggs</button> <button class="filter-btn" data-filter="decor"
-              onclick="setFilter('decor')">Decor</button> <button class="filter-btn" data-filter="weather"
-              onclick="setFilter('weather')">Weather</button> </div>
-          <div class="search-bar"> <input type="text" class="search-input" placeholder="Search..."
-              oninput="handleSearch(this.value)"> </div>
-        </div>
-        <div class="history-table" id="history-table">
-          <div class="loading">
-            <div class="loading-spinner"></div> <span>Loading history...</span>
-          </div>
+        <div class="history-table" id="history-body">
+          <div class="loading"><div class="loading-spinner"></div><span>Loading history…</span></div>
         </div>
       </div>
-    </div>
-  </div>
+    </section>
+  </main>
+
   <script type="module" src="./src/js/main.js"></script>
 </body>
-
 </html>

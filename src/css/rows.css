@@ -1,0 +1,278 @@
+.restock-pred-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--spacing-sm);
+}
+
+.restock-pred-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  gap: 12px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--bg) 50%, transparent);
+  border: 1px solid transparent;
+  min-height: 52px;
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.15s ease;
+  cursor: pointer;
+}
+
+.restock-pred-row:hover {
+  transform: scale(1.01);
+  background: var(--soft);
+  border-color: var(--border);
+  box-shadow: 0 4px 12px var(--shadow);
+  z-index: 2;
+}
+
+.restock-pred-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+  max-width: calc(100% - 200px);
+}
+
+.restock-icon-wrap {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: var(--soft);
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.restock-icon-wrap.rarity-common    { border-color: var(--rarity-common); }
+.restock-icon-wrap.rarity-uncommon  { border-color: var(--rarity-uncommon); }
+.restock-icon-wrap.rarity-rare      { border-color: var(--rarity-rare); }
+.restock-icon-wrap.rarity-legendary {
+  border-color: var(--rarity-legendary);
+  box-shadow: 0 0 8px color-mix(in oklab, var(--rarity-legendary) 30%, transparent);
+}
+.restock-icon-wrap.rarity-mythical  {
+  border-color: var(--rarity-mythical);
+  box-shadow: 0 0 10px color-mix(in oklab, var(--rarity-mythical) 40%, transparent);
+}
+.restock-icon-wrap.rarity-epic {
+  border-color: var(--rarity-mythical);
+  box-shadow: 0 0 10px color-mix(in oklab, var(--rarity-mythical) 40%, transparent);
+}
+.restock-icon-wrap.rarity-divine {
+  border-color: var(--rarity-divine);
+  box-shadow: 0 0 12px color-mix(in oklab, var(--rarity-divine) 50%, transparent);
+}
+.restock-icon-wrap.rarity-celestial {
+  border-color: var(--rarity-celestial);
+  box-shadow: 0 0 12px color-mix(in oklab, var(--rarity-celestial) 50%, transparent);
+}
+
+.restock-item-sprite,
+.restock-decor-icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.restock-pred-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.restock-pred-line1 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.restock-item-name {
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.restock-text-common    { color: var(--fg); }
+.restock-text-uncommon  { color: var(--rarity-uncommon); }
+.restock-text-rare      { color: var(--rarity-rare); }
+.restock-text-legendary { color: var(--rarity-legendary); }
+.restock-text-mythical  { color: var(--rarity-mythical); }
+.restock-text-epic      { color: var(--rarity-mythical); }
+.restock-text-divine    { color: var(--rarity-divine); }
+.restock-text-celestial { color: var(--rarity-celestial); }
+.restock-text-rainbow {
+  background-image: var(--rainbow-text-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.restock-pred-line2 {
+  font-size: 12px;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.restock-pred-metrics {
+  display: flex;
+  gap: 40px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.restock-pred-metric-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 52px;
+  width: 52px;
+  cursor: help;
+}
+
+.restock-pred-metric-value {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+  color: var(--fg);
+}
+
+.restock-pred-metric-label {
+  font-size: 10px;
+  opacity: 0.5;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.restock-eta-now       { color: #10b981 !important; }
+.restock-eta-imminent  { color: #22c55e !important; }
+.restock-eta-soon      { color: #84cc16 !important; }
+.restock-eta-today     { color: #eab308 !important; }
+.restock-eta-week      { color: #f97316 !important; }
+.restock-eta-fortnight { color: #f87171 !important; }
+.restock-eta-far       { color: #ef4444 !important; }
+.restock-eta-none      { color: var(--fg); opacity: 0.4; }
+
+.restock-rate-high { color: #4ade80; }
+.restock-rate-mid  { color: #fbbf24; }
+.restock-rate-low  { color: #f87171; }
+
+.restock-pred-metric-wrap[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 10px;
+  padding: 10px 14px;
+  background: color-mix(in oklab, var(--bg) 95%, var(--fg));
+  backdrop-filter: blur(8px);
+  border: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+  border-radius: 8px;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: pre-line;
+  z-index: 100;
+  box-shadow: 0 4px 16px color-mix(in oklab, var(--shadow) 40%, transparent);
+  pointer-events: none;
+  animation: tooltip-fade-in 0.15s ease-out;
+}
+
+@keyframes tooltip-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.restock-price-wrap {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--rarity-legendary);
+  font-weight: 700;
+}
+
+.restock-coin-icon {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  display: block;
+}
+
+.restock-pred-row.is-celestial {
+  background: color-mix(in oklab, var(--rarity-legendary) 5%, transparent);
+  border-color: color-mix(in oklab, var(--rarity-legendary) 22%, transparent);
+}
+.restock-pred-row.is-celestial:hover {
+  background: color-mix(in oklab, var(--rarity-legendary) 10%, transparent);
+}
+.restock-pred-row.is-dormant {
+  background: color-mix(in oklab, #fbbf24 5%, transparent);
+}
+.restock-seasonal { color: #fbbf24 !important; font-size: 14px !important; }
+.restock-nodata   { color: #f87171; }
+
+.weather-badge {
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  white-space: nowrap;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--fg);
+  opacity: 0.7;
+  background: var(--soft);
+  border: 1px solid var(--border);
+}
+.weather-badge.is-active {
+  opacity: 1;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.12);
+  border-color: rgba(74, 222, 128, 0.3);
+}
+
+.unpin-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--fg);
+  opacity: 0.45;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+.unpin-btn:hover { opacity: 1; }
+.pin-hint { padding: 8px 12px 4px; font-size: 12px; opacity: 0.5; }
+
+@media (max-width: 768px) {
+  .restock-pred-metrics { gap: 12px; }
+  .restock-pred-metric-wrap { min-width: 48px; width: 48px; }
+  .restock-pred-left { max-width: calc(100% - 120px); }
+  .restock-icon-wrap { width: 36px; height: 36px; }
+  .restock-item-sprite { width: 28px; height: 28px; }
+  .restock-item-name { font-size: 13px; }
+}
+
+@media (max-width: 480px) {
+  .restock-pred-metrics { gap: 10px; }
+  .restock-pred-metric-value { font-size: 18px; }
+}
