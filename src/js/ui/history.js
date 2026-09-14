@@ -9,15 +9,15 @@ const $ = (id) => document.getElementById(id);
 const COLUMNS = [
   { key: 'item', label: 'Item', className: '' },
   { key: 'price', label: 'Price', className: 'num' },
-  { key: 'qty', label: 'Qty', className: 'num' },
-  { key: 'last', label: 'Seen', className: 'time' },
+  { key: 'sightings', label: 'Sightings', className: 'num' },
+  { key: 'last', label: 'Last Seen', className: 'time' },
 ];
 
 function sortValue(item, column) {
   switch (column) {
     case 'item': return getItemName(item.item_id, item.shop_type).toLowerCase();
     case 'price': return getItemPrice(item.item_id, item.shop_type);
-    case 'qty': return item.average_quantity ?? 0;
+    case 'sightings': return item.total_occurrences ?? 0;
     default: return item.last_seen ?? 0;
   }
 }

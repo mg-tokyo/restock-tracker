@@ -66,14 +66,21 @@ test('weather badge reflects live weather; refresh updates it', () => {
   });
 });
 
-test('hist row: price, dust, qty, seen, pin', () => {
+test('hist row: price, dust, sightings, last seen, pin', () => {
   let pinned = null;
-  const tr = rows.buildHistRow(base({ item_id: 'XPShard', shop_type: 'tool', average_quantity: 1.5 }), 'tool:XPShard', { onPin: (k) => { pinned = k; } });
+  const tr = rows.buildHistRow(base({ item_id: 'XPShard', shop_type: 'tool', total_occurrences: 1234 }), 'tool:XPShard', { onPin: (k) => { pinned = k; } });
   assert.equal(tr.find('restock-item-name').textContent, 'XP Shard');
   assert.equal(tr.find('restock-price-wrap'), null);
   assert.ok(tr.find('restock-dust-wrap').textContent.includes('30'));
   assert.equal(tr.find('restock-shop-label').textContent, 'Tools');
-  assert.equal(tr.children[2].textContent, '1.5');
+  assert.equal(tr.children.length, 4);
+  assert.equal(tr.children[2].textContent, (1234).toLocaleString());
+  assert.ok(tr.children[3].find('restock-time-cell'));
   tr.click();
   assert.equal(pinned, 'tool:XPShard');
+});
+
+test('hist row: sightings shows -- when never sighted', () => {
+  const tr = rows.buildHistRow(base({ item_id: 'Carrot', shop_type: 'seed', total_occurrences: null, last_seen: null }), 'seed:Carrot', { onPin() {} });
+  assert.equal(tr.children[2].textContent, '--');
 });

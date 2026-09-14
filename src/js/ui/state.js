@@ -3,7 +3,7 @@ import { KEYS } from '../config.js';
 import { readRaw, writeRaw, removeKey } from '../data/cache.js';
 import { UI_STATE_SAVE_DEBOUNCE_MS } from '../data/constants.js';
 
-export const SORT_COLUMNS = ['item', 'price', 'qty', 'last'];
+export const SORT_COLUMNS = ['item', 'price', 'sightings', 'last'];
 const LEGACY_TRACKED_KEY = 'trackedItems';
 
 export function loadUiState() {

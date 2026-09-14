@@ -31,6 +31,8 @@ const SUPABASE_HEADERS = {
   apikey: SUPABASE_KEY,
   Authorization: `Bearer ${SUPABASE_KEY}`,
   'Content-Type': 'application/json',
+  // Tool label for Supabase API-log usage counts (Gemini-server `npm run usage`).
+  'x-client-info': 'restock-tracker',
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

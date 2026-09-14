@@ -27,10 +27,10 @@ before(async () => {
 
 const row = (item_id, shop_type, extra = {}) => ({ item_id, shop_type, last_seen: 0, average_quantity: 1, total_occurrences: 3, ...extra });
 const ITEMS = [
-  row('Apple', 'seed', { last_seen: 300, average_quantity: 5 }),
-  row('Carrot', 'seed', { last_seen: 100, average_quantity: 2 }),
-  row('CommonEgg', 'egg', { last_seen: 200, average_quantity: 1 }),
-  row('DawnCelestial', 'dawn', { last_seen: 400 }),
+  row('Apple', 'seed', { last_seen: 300, total_occurrences: 10 }),
+  row('Carrot', 'seed', { last_seen: 100, total_occurrences: 5 }),
+  row('CommonEgg', 'egg', { last_seen: 200, total_occurrences: 8 }),
+  row('DawnCelestial', 'dawn', { last_seen: 400, total_occurrences: 42 }),
   row('StoneGnome', 'seed'),
   row('Rain', 'weather'),
 ];
@@ -53,6 +53,6 @@ test('column sorts', () => {
   const ids = (o) => history.filterAndSort(ITEMS, { ...base, ...o }).map((i) => i.item_id);
   assert.deepEqual(ids({ sortColumn: 'item' }), ['Apple', 'Carrot', 'Common Egg', 'Dawn Celestial', 'Rain'].map((n) => n.replace(' ', '')));
   assert.deepEqual(ids({ sortColumn: 'price', sortDirection: 'desc' }).slice(0, 2), ['Apple', 'CommonEgg']);
-  assert.deepEqual(ids({ sortColumn: 'qty', sortDirection: 'desc' }).slice(0, 2), ['Apple', 'Carrot']);
+  assert.deepEqual(ids({ sortColumn: 'sightings', sortDirection: 'desc' })[0], 'DawnCelestial');
   assert.deepEqual(ids({ sortColumn: 'last', sortDirection: 'desc' })[0], 'DawnCelestial');
 });

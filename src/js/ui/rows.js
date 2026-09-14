@@ -177,8 +177,8 @@ export function buildHistRow(item, key, { onPin }) {
   cell.appendChild(info);
   itemTd.appendChild(cell);
 
-  const qty = item.average_quantity;
-  const qtyTd = el('td', 'num', qty && qty > 0 ? (Number.isInteger(qty) ? String(qty) : qty.toFixed(1)) : '--');
+  const seenCount = item.total_occurrences ?? 0;
+  const sightTd = el('td', 'num', seenCount > 0 ? seenCount.toLocaleString() : '--');
 
   const lastTd = el('td', 'time');
   lastTd.title = item.last_seen ? new Date(item.last_seen).toLocaleString() : '--';
@@ -188,7 +188,7 @@ export function buildHistRow(item, key, { onPin }) {
   if (relDay) timeCell.appendChild(el('div', 'restock-rel-day', relDay));
   lastTd.appendChild(timeCell);
 
-  tr.append(itemTd, makePriceCell(item), qtyTd, lastTd);
+  tr.append(itemTd, makePriceCell(item), sightTd, lastTd);
   tr.addEventListener('click', () => onPin(key));
   return tr;
 }
