@@ -74,13 +74,14 @@
 .history-table tbody tr:hover td:first-child { border-left-color: var(--border); }
 .history-table tbody tr:hover td:last-child  { border-right-color: var(--border); }
 
-.history-table td.num  {
+.history-table td.num,
+.history-table thead th.num  {
   text-align: center;
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  opacity: 0.9;
 }
-.history-table td.time { text-align: right; }
+.history-table td.num { font-weight: 600; opacity: 0.9; }
+.history-table td.time,
+.history-table thead th.time { text-align: right; }
 
 .restock-item-cell {
   display: flex;
