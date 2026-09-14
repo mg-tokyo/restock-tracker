@@ -15,6 +15,9 @@ const sprite = (def) => (typeof def?.sprite === 'string' ? def.sprite : null);
 export function buildItemMetaCache(gameData) {
   itemMetaCache.clear();
   itemCatalogOrder.clear();
+  // Sprite URLs derive from itemMetaCache; drop cached null entries from any renders that ran
+  // before this cache was populated (e.g. restock predictions arriving before Ariedam /data).
+  spriteUrlCache.clear();
   if (!gameData || typeof gameData !== 'object') return;
   let order = 0;
   for (const [id, plant] of Object.entries(gameData.plants ?? {})) {
@@ -186,6 +189,14 @@ export function getSpriteUrl(item) {
   for (const variant of getItemIdVariants(shop, id)) {
     url = getItemMeta(variant, shop)?.spriteUrl ?? null;
     if (url) break;
+  }
+  // Shop and catalog family diverge for cross-shop items (e.g. Tool Shack sells DecorShed,
+  // which lives under `decor` in the catalog). Fall through to any family's sprite for this id.
+  if (!url) {
+    for (const fam of FAMILIES) {
+      const spriteFromOtherFamily = itemMetaCache.get(`${fam}:${id}`)?.spriteUrl;
+      if (spriteFromOtherFamily) { url = spriteFromOtherFamily; break; }
+    }
   }
   if (!url && shop === 'decor') url = `./decor-sprites/${encodeURIComponent(id)}.png`;
   if (!url && shop === 'tool') {

@@ -73,3 +73,23 @@ test('sprite urls', () => {
   assert.equal(meta.getSpriteUrl({ item_id: 'Rakes', shop_type: 'tool' }), 'https://mg-api.ariedam.fr/assets/sprites/items/Rake.png');
   assert.equal(meta.getSpriteUrl({ item_id: 'SnowEgg', shop_type: 'snow' }), 'https://x/pets/SnowEgg.png');
 });
+
+test('sprite urls fall through catalog families when shop and family diverge', () => {
+  const DATA_CROSS = {
+    plants: {},
+    eggs: {},
+    items: {
+      PlanterPot: { name: 'Planter Pot', rarity: 'Common', coinPrice: 25000, sprite: 'https://x/items/PlanterPot.png', eligibleShops: ['Tool'] },
+    },
+    decor: {
+      DecorShed: { name: 'Decor Shed', rarity: 'Rare', coinPrice: 1, sprite: 'https://x/decor/DecorShed.png', eligibleShops: ['Tool'] },
+      StringLights: { name: 'String Lights', rarity: 'Common', coinPrice: 7000, sprite: 'https://x/decor/StringLights.png', eligibleShops: ['Decor'] },
+    },
+  };
+  buildEligibility(DATA_CROSS);
+  meta.buildItemMetaCache(DATA_CROSS);
+  meta.clearSpriteUrlCache();
+  assert.equal(meta.getSpriteUrl({ item_id: 'DecorShed', shop_type: 'tool' }), 'https://x/decor/DecorShed.png');
+  assert.equal(meta.getSpriteUrl({ item_id: 'PlanterPot', shop_type: 'decor' }), 'https://x/items/PlanterPot.png');
+  assert.equal(meta.getSpriteUrl({ item_id: 'StringLights', shop_type: 'seed' }), 'https://x/decor/StringLights.png');
+});
