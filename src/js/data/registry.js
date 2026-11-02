@@ -2,7 +2,7 @@
 
 export const STANDARD_SHOP_TYPES = new Set(['seed', 'egg', 'decor', 'tool']);
 
-// Snapshot of the live registry on 2026-09-01. Used until the network copy loads.
+// Snapshot of the live registry on 2026-11-02 (same order). Used until the network copy loads.
 export const FALLBACK_REGISTRY = [
   { shop_type: 'seed',    cycle_interval_ms: 300000,  is_active: true, config: {} },
   { shop_type: 'egg',     cycle_interval_ms: 900000,  is_active: true, config: {} },
@@ -11,8 +11,9 @@ export const FALLBACK_REGISTRY = [
   { shop_type: 'dawn',    cycle_interval_ms: 300000,  is_active: true, config: { weather_gated: 'Dawn' } },
   { shop_type: 'snow',    cycle_interval_ms: 300000,  is_active: true, config: { weather_gated: 'Frost' } },
   { shop_type: 'thunder', cycle_interval_ms: 600000,  is_active: true, config: {} },
-  { shop_type: 'amber',   cycle_interval_ms: 600000,  is_active: true, config: {} },
   { shop_type: 'rain',    cycle_interval_ms: 600000,  is_active: true, config: {} },
+  { shop_type: 'spooky',  cycle_interval_ms: 1800000, is_active: true, config: {} },
+  { shop_type: 'amber',   cycle_interval_ms: 600000,  is_active: true, config: { weather_gated: 'AmberMoon' } },
 ];
 
 // Shop id → canonical weather id when the registry config lacks weather_gated.

@@ -5,7 +5,7 @@ import * as reg from '../src/js/data/registry.js';
 beforeEach(() => reg.setRegistry(null));
 
 test('fallback registry exposes standard + weather shops', () => {
-  assert.deepEqual(reg.getWeatherShopIds(), ['dawn', 'snow', 'thunder', 'amber', 'rain']);
+  assert.deepEqual(reg.getWeatherShopIds(), ['dawn', 'snow', 'thunder', 'rain', 'spooky', 'amber']);
   assert.equal(reg.isAllowedShopType('tool'), true);
   assert.equal(reg.isAllowedShopType('weather'), true);
   assert.equal(reg.isAllowedShopType('apology'), false);
@@ -14,6 +14,8 @@ test('fallback registry exposes standard + weather shops', () => {
   assert.equal(reg.getShopWeatherKind('snow'), 'Snow');
   assert.equal(reg.getShopWeatherKind('amber'), 'AmberMoon');
   assert.equal(reg.getShopWeatherKind('seed'), null);
+  assert.equal(reg.getShopCycleInterval('spooky'), 1800000);
+  assert.equal(reg.getShopWeatherKind('spooky'), null);
   assert.equal(reg.isWeatherShopType('dawn'), true);
   assert.equal(reg.isWeatherShopType('seed'), false);
 });

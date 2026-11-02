@@ -1,6 +1,6 @@
 // History card: filter/sort pipeline (pure) + chunked table renderer.
 import { isHiddenOrExpired, getShopOrder, HISTORY_CHUNK_SIZE } from '../data/constants.js';
-import { getItemName, getItemPrice, getCatalogOrder, isCelestial } from '../data/meta.js';
+import { getItemName, getItemPrice, getCatalogOrder, getItemExpiry, isCelestial } from '../data/meta.js';
 import { SORT_COLUMNS } from './state.js';
 import { buildHistRow, el } from './rows.js';
 
@@ -40,7 +40,7 @@ export function filterAndSort(items, { tracked, filter, search, sortColumn, sort
   const filtered = items.filter((item) => {
     const key = `${item.shop_type}:${item.item_id}`;
     if (tracked.has(key)) return false;
-    if (isHiddenOrExpired(item.shop_type, item.item_id, now)) return false;
+    if (isHiddenOrExpired(item.shop_type, item.item_id, now, getItemExpiry(item.item_id))) return false;
     if (filter === 'celestial') { if (!isCelestial(item.item_id)) return false; }
     else if (filter !== 'all' && item.shop_type !== filter) return false;
     if (q) {

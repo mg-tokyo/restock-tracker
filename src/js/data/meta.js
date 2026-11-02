@@ -8,13 +8,37 @@ import { getShopEligibleItemIds, getItemEligibleShops, isEligibilityLoaded } fro
 
 const itemMetaCache = new Map();   // "shop:item" → { name, rarity, price, priceMagicDust?, spriteUrl }
 const itemCatalogOrder = new Map(); // "shop:item" → index within family
+// Family-agnostic catalog view keyed by bare id (site equivalent of QPM-GR getCatalogItemMeta):
+// id → { name, rarity, price, priceMagicDust?, spriteUrl, expiryMs }. First family wins: plant, egg, item, decor.
+const catalogMeta = new Map();
 
 const str = (v, fallback) => (typeof v === 'string' && v.trim() ? v : fallback);
 const sprite = (def) => (typeof def?.sprite === 'string' ? def.sprite : null);
+// Ariedam names the field `dustPrice`; `magicDustPrice` kept for parity with QPM-GR getItemCatalogPricing.
+const dustOf = (def) => Number(def?.magicDustPrice ?? def?.dustPrice);
+const isCoinPrice = (n) => Number.isFinite(n) && n > 0 && n < 1_000_000_000; // sentinel prices = not coin-purchasable
+
+function toExpiryMs(v) {
+  if (typeof v !== 'string' || !v) return null;
+  const t = Date.parse(v);
+  return Number.isFinite(t) ? t : null;
+}
+
+function addCatalogMeta(id, def) {
+  if (!def || typeof def !== 'object' || catalogMeta.has(id)) return;
+  const coin = Number(def.coinPrice);
+  const dust = dustOf(def);
+  catalogMeta.set(id, {
+    name: str(def.name, id), rarity: String(def.rarity ?? 'common').toLowerCase(),
+    price: isCoinPrice(coin) ? coin : 0, ...(Number.isFinite(dust) && dust > 0 ? { priceMagicDust: dust } : {}),
+    spriteUrl: sprite(def), expiryMs: toExpiryMs(def.expiryDate),
+  });
+}
 
 export function buildItemMetaCache(gameData) {
   itemMetaCache.clear();
   itemCatalogOrder.clear();
+  catalogMeta.clear();
   // Sprite URLs derive from itemMetaCache; drop cached null entries from any renders that ran
   // before this cache was populated (e.g. restock predictions arriving before Ariedam /data).
   spriteUrlCache.clear();
@@ -23,6 +47,7 @@ export function buildItemMetaCache(gameData) {
   for (const [id, plant] of Object.entries(gameData.plants ?? {})) {
     const seed = plant?.seed;
     if (!seed) continue;
+    addCatalogMeta(id, seed);
     itemMetaCache.set(`seed:${id}`, {
       name: str(seed.name, `${id} Seed`), rarity: String(seed.rarity ?? 'common').toLowerCase(),
       price: Number(seed.coinPrice ?? 0), spriteUrl: sprite(seed),
@@ -31,6 +56,7 @@ export function buildItemMetaCache(gameData) {
   }
   order = 0;
   for (const [id, egg] of Object.entries(gameData.eggs ?? {})) {
+    addCatalogMeta(id, egg);
     itemMetaCache.set(`egg:${id}`, {
       name: str(egg?.name, id), rarity: String(egg?.rarity ?? 'common').toLowerCase(),
       price: Number(egg?.coinPrice ?? 0), spriteUrl: sprite(egg),
@@ -39,6 +65,7 @@ export function buildItemMetaCache(gameData) {
   }
   order = 0;
   for (const [id, decor] of Object.entries(gameData.decor ?? {})) {
+    addCatalogMeta(id, decor);
     itemMetaCache.set(`decor:${id}`, {
       name: str(decor?.name, id), rarity: String(decor?.rarity ?? 'common').toLowerCase(),
       price: Number(decor?.coinPrice ?? 0), spriteUrl: sprite(decor),
@@ -47,9 +74,10 @@ export function buildItemMetaCache(gameData) {
   }
   order = 0;
   for (const [id, item] of Object.entries(gameData.items ?? {})) {
+    addCatalogMeta(id, item);
     const coin = Number(item?.coinPrice);
-    const dust = Number(item?.magicDustPrice);
-    const hasCoin = Number.isFinite(coin) && coin > 0 && coin < 1_000_000_000; // sentinel prices = not coin-purchasable
+    const dust = dustOf(item);
+    const hasCoin = isCoinPrice(coin);
     const hasDust = Number.isFinite(dust) && dust > 0;
     if (!hasCoin && !hasDust) continue; // non-shop items (mutation potions, DawnCapsule)
     itemMetaCache.set(`tool:${id}`, {
@@ -73,8 +101,22 @@ function lookup(map, itemId, shopType) {
   return undefined;
 }
 
+/**
+ * Port of QPM-GR restockWindowMeta getItemMeta: shop-family meta first; the family-agnostic catalog
+ * covers ids the shop's family lacks (e.g. Tool Shack sells DecorShed, filed under decor) or names by raw id.
+ */
 export function getItemMeta(itemId, shopType) {
-  return lookup(itemMetaCache, itemId, shopType) ?? null;
+  const direct = lookup(itemMetaCache, itemId, shopType) ?? null;
+  if (direct && direct.name !== itemId) return direct;
+  const catalog = catalogMeta.get(itemId);
+  if (!catalog) return direct;
+  return direct ? { ...direct, name: catalog.name } : catalog;
+}
+
+/** Catalog expiry in ms, null when the catalog lists the id without one, undefined when the id is unknown. */
+export function getItemExpiry(itemId) {
+  const entry = catalogMeta.get(itemId);
+  return entry ? entry.expiryMs : undefined;
 }
 
 export function humanizeId(id) {
@@ -109,36 +151,27 @@ export function getCatalogOrder(itemId, shopType) {
 export function isCelestial(itemId) {
   if (!itemId) return false;
   if (CELESTIAL_IDS.has(itemId)) return true;
-  for (const fam of FAMILIES) {
-    if (itemMetaCache.get(`${fam}:${itemId}`)?.rarity === 'celestial') return true;
-  }
-  return false;
+  return catalogMeta.get(itemId)?.rarity === 'celestial';
 }
-
-// Offline fallback when the Ariedam catalog is unavailable.
-const WEATHER_LOCK_FALLBACK = { SnowEgg: 'Snow', DawnEgg: 'Dawn', ThunderEgg: 'Thunderstorm' };
 
 /** Weather an item is locked behind: its weather shop's kind, unless a standard shop also sells it. */
 export function getRequiredWeather(itemId) {
   const shops = getItemEligibleShops(itemId);
-  if (shops.length > 0) {
-    if (shops.some((s) => STANDARD_SHOP_TYPES.has(s))) return null;
-    for (const s of shops) {
-      const kind = getShopWeatherKind(s);
-      if (kind) return kind;
-    }
-    return null;
+  if (shops.length === 0) return null;
+  if (shops.some((s) => STANDARD_SHOP_TYPES.has(s))) return null;
+  for (const s of shops) {
+    const kind = getShopWeatherKind(s);
+    if (kind) return kind;
   }
-  return isEligibilityLoaded() ? null : (WEATHER_LOCK_FALLBACK[itemId] ?? null);
+  return null;
 }
 
 // ---- fallback rows ----
 
+/** Tool shop membership from eligibleShops; priced Ariedam items only when eligibility is unavailable. */
 function toolCatalogIds() {
-  const ids = new Set();
-  if (isEligibilityLoaded()) for (const id of getShopEligibleItemIds('tool')) ids.add(id);
-  for (const k of itemMetaCache.keys()) if (k.startsWith('tool:')) ids.add(k.slice(5));
-  return Array.from(ids);
+  if (isEligibilityLoaded()) return getShopEligibleItemIds('tool');
+  return Array.from(itemMetaCache.keys()).filter((k) => k.startsWith('tool:')).map((k) => k.slice(5));
 }
 
 /** Adds an empty row for every catalog tool the API has not seen yet. */
@@ -151,19 +184,12 @@ export function mergeToolFallbackRows(items) {
   return merged;
 }
 
-const WEATHER_SHOP_FALLBACK_ITEM_IDS = {
-  dawn: ['Daisy', 'Lavender', 'Saffron', 'Eggplant', 'Ube', 'Dawnbreaker', 'DawnCelestial', 'DawnEgg'],
-  snow: ['Snowdrop', 'Leek', 'PineTree', 'Squash', 'Poinsettia', 'SnowEgg', 'ChilledPotion', 'FrozenPotion',
-    'WoodCaribou', 'StoneCaribou', 'MarbleCaribou', 'ColoredStringLights'],
-};
-
-/** Adds an empty row for every item a registry weather shop can carry. */
+/** Adds an empty row for every item a registry weather shop can carry. Server rows only until eligibility loads. */
 export function mergeWeatherShopFallbackRows(items) {
-  const loaded = isEligibilityLoaded();
-  const shopIds = loaded ? getWeatherShopIds() : Object.keys(WEATHER_SHOP_FALLBACK_ITEM_IDS);
+  if (!isEligibilityLoaded()) return items;
   let merged = null;
-  for (const shop of shopIds) {
-    const ids = loaded ? getShopEligibleItemIds(shop) : (WEATHER_SHOP_FALLBACK_ITEM_IDS[shop] ?? []);
+  for (const shop of getWeatherShopIds()) {
+    const ids = getShopEligibleItemIds(shop);
     if (!ids.length) continue;
     const existing = new Set(items.filter((r) => r.shop_type === shop).map((r) => r.item_id));
     for (const id of ids) {
@@ -192,12 +218,7 @@ export function getSpriteUrl(item) {
   }
   // Shop and catalog family diverge for cross-shop items (e.g. Tool Shack sells DecorShed,
   // which lives under `decor` in the catalog). Fall through to any family's sprite for this id.
-  if (!url) {
-    for (const fam of FAMILIES) {
-      const spriteFromOtherFamily = itemMetaCache.get(`${fam}:${id}`)?.spriteUrl;
-      if (spriteFromOtherFamily) { url = spriteFromOtherFamily; break; }
-    }
-  }
+  if (!url) url = catalogMeta.get(id)?.spriteUrl ?? null;
   if (!url && shop === 'decor') url = `./decor-sprites/${encodeURIComponent(id)}.png`;
   if (!url && shop === 'tool') {
     const normalized = id.endsWith('s') && id.length > 1 ? id.slice(0, -1) : id;

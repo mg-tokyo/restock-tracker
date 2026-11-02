@@ -39,6 +39,43 @@ export function isEligibilityLoaded() { return eligibilityLoaded; }
 export function getShopEligibleItemIds(shopId) { return shopToItems.get(String(shopId).toLowerCase()) ?? []; }
 export function getItemEligibleShops(itemId) { return itemToShops.get(itemId) ?? []; }
 
+/**
+ * Port of QPM-GR dataService pruneStaleShopTypeRows. The server view keeps stale (shop_type, item_id)
+ * rows across shop reshuffles; drop any whose shop the item's current eligibleShops no longer lists.
+ * Weather rows and items without eligibility info are kept. No-op until eligibility has loaded.
+ */
+export function pruneStaleShopTypeRows(items) {
+  if (!eligibilityLoaded) return items;
+  return items.filter((item) => {
+    if (item.shop_type === 'weather') return true;
+    const eligible = getItemEligibleShops(item.item_id);
+    return eligible.length === 0 || eligible.includes(item.shop_type);
+  });
+}
+
+/**
+ * Rewrites pinned "shop:item" keys whose shop is stale to the item's single current shop.
+ * Pins with several or no eligible shops are left alone. Pure: returns a new set when anything changed.
+ */
+export function remapStalePins(tracked) {
+  if (!eligibilityLoaded) return { set: tracked, changed: false };
+  let changed = false;
+  const out = new Set();
+  for (const key of tracked) {
+    const sep = key.indexOf(':');
+    const shop = key.slice(0, sep);
+    const itemId = key.slice(sep + 1);
+    const eligible = shop === 'weather' ? [] : getItemEligibleShops(itemId);
+    if (eligible.length === 1 && eligible[0] !== shop) {
+      out.add(`${eligible[0]}:${itemId}`);
+      changed = true;
+    } else {
+      out.add(key);
+    }
+  }
+  return changed ? { set: out, changed } : { set: tracked, changed };
+}
+
 // ---- /data ----
 
 let gameDataPromise = null;

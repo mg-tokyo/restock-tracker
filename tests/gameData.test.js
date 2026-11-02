@@ -49,3 +49,36 @@ test('live weather canonicalises and notifies on change', async () => {
   await gd.refreshLiveWeather({ force: true });
   assert.deepEqual(seen, ['Snow', 'Sunny']);
 });
+
+const row = (shop, id) => ({ shop_type: shop, item_id: id, total_occurrences: 5 });
+
+test('pruneStaleShopTypeRows is a no-op before eligibility loads', () => {
+  const items = [row('seed', 'Daisy')];
+  assert.equal(gd.pruneStaleShopTypeRows(items), items);
+});
+
+test('pruneStaleShopTypeRows drops rows under shops the item no longer lists', () => {
+  gd.buildEligibility(DATA);
+  const kept = gd.pruneStaleShopTypeRows([
+    row('seed', 'Daisy'),      // stale: Daisy is Dawn-only now
+    row('dawn', 'Daisy'),
+    row('seed', 'Carrot'),
+    row('decor', 'WoodFrog'),  // multi-shop item, still eligible
+    row('rain', 'WoodFrog'),
+    row('weather', 'Rain'),    // weather rows always kept
+    row('seed', 'Mystery'),    // no eligibility info → kept
+  ]).map((r) => `${r.shop_type}:${r.item_id}`);
+  assert.deepEqual(kept, ['dawn:Daisy', 'seed:Carrot', 'decor:WoodFrog', 'rain:WoodFrog', 'weather:Rain', 'seed:Mystery']);
+});
+
+test('remapStalePins moves a pin to the item\'s single current shop', () => {
+  const pins = new Set(['seed:Daisy', 'seed:Carrot', 'seed:WoodFrog', 'seed:Mystery', 'weather:Rain']);
+  assert.deepEqual(gd.remapStalePins(pins), { set: pins, changed: false }); // eligibility not loaded
+  gd.buildEligibility(DATA);
+  const { set, changed } = gd.remapStalePins(pins);
+  assert.equal(changed, true);
+  // Daisy → dawn; WoodFrog has two eligible shops → left alone; unknown + weather untouched.
+  assert.deepEqual([...set], ['dawn:Daisy', 'seed:Carrot', 'seed:WoodFrog', 'seed:Mystery', 'weather:Rain']);
+  assert.ok(pins.has('seed:Daisy'), 'input set is not mutated');
+  assert.equal(gd.remapStalePins(set).changed, false);
+});

@@ -17,7 +17,7 @@ test('shop order: standard, weather shops, weather events last', () => {
 test('filters are registry-driven', () => {
   setRegistry(null);
   assert.deepEqual(getShopFilters().map((f) => f.value),
-    ['all', 'celestial', 'seed', 'egg', 'decor', 'tool', 'dawn', 'snow', 'thunder', 'amber', 'rain', 'weather']);
+    ['all', 'celestial', 'seed', 'egg', 'decor', 'tool', 'dawn', 'snow', 'thunder', 'rain', 'spooky', 'amber', 'weather']);
   assert.equal(getShopFilters().find((f) => f.value === 'thunder').label, 'Thunder');
   assert.equal(SHOP_LABELS.tool, 'Tools');
 });
@@ -28,5 +28,10 @@ test('hidden and expiry', () => {
   const exp = ITEM_EXPIRY['seed:PineTree'];
   assert.equal(isHiddenOrExpired('seed', 'PineTree', exp - 1), false);
   assert.equal(isHiddenOrExpired('seed', 'PineTree', exp), true);
+  // Catalog expiry (number or null) overrides the hardcoded offline fallback.
+  assert.equal(isHiddenOrExpired('seed', 'PineTree', exp, null), false);
+  assert.equal(isHiddenOrExpired('seed', 'GhostPlant', 2000, 1000), true);
+  assert.equal(isHiddenOrExpired('seed', 'GhostPlant', 999, 1000), false);
+  assert.equal(isHiddenOrExpired('seed', 'StoneGnome', 0, null), true);
   assert.ok(CELESTIAL_IDS.has('MythicalEgg'));
 });

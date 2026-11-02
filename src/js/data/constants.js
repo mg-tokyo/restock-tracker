@@ -9,7 +9,8 @@ export const ITEM_HIDDEN = new Set([
   'seed:WoodOwl',
 ]);
 
-// Time-limited seasonal items — hidden after expiry. Key "shop:item", value ms UTC.
+// Offline fallback only: once the Ariedam catalog loads, its `expiryDate` (meta.getItemExpiry) is authoritative
+// for every id it lists. Key "shop:item", value ms UTC.
 export const ITEM_EXPIRY = {
   'seed:PineTree':             1768179600000,
   'seed:Poinsettia':           1768179600000,
@@ -24,10 +25,11 @@ export const ITEM_EXPIRY = {
   'decor:WoodCaribou':         1768179600000,
 };
 
-export function isHiddenOrExpired(shopType, itemId, now = Date.now()) {
+/** catalogExpiry: ms or null from the catalog; undefined when the catalog doesn't know the id (use ITEM_EXPIRY). */
+export function isHiddenOrExpired(shopType, itemId, now = Date.now(), catalogExpiry = undefined) {
   const key = `${shopType}:${itemId}`;
   if (ITEM_HIDDEN.has(key)) return true;
-  const exp = ITEM_EXPIRY[key];
+  const exp = catalogExpiry !== undefined ? catalogExpiry : ITEM_EXPIRY[key];
   return typeof exp === 'number' && exp <= now;
 }
 

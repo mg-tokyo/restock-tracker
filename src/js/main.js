@@ -1,7 +1,9 @@
 // Entry point: wires data loaders to the UI.
 import { purgeLegacyKeys } from './data/cache.js';
 import { loadRegistry, loadRestockItems, loadWeatherPredictions } from './data/api.js';
-import { loadGameData, refreshLiveWeather, onWeatherChange, startLiveWeatherPolling } from './data/gameData.js';
+import {
+  loadGameData, refreshLiveWeather, onWeatherChange, startLiveWeatherPolling, pruneStaleShopTypeRows, remapStalePins,
+} from './data/gameData.js';
 import { buildItemMetaCache, mergeToolFallbackRows, mergeWeatherShopFallbackRows } from './data/meta.js';
 import { weatherPredictionsAsRestockItems } from './data/weather.js';
 import { getRefreshBudget } from './data/budget.js';
@@ -34,6 +36,7 @@ export async function initApp() {
   let weatherRows = [];
   let allData = [];
   let fetchedAt = null;
+  let lastLoad = null; // { stale } after a successful load; null before or after a failure
   let loading = false;
   let etaRefs = [];
 
@@ -63,8 +66,15 @@ export async function initApp() {
     queued = true;
     requestAnimationFrame(() => { queued = false; renderNow(); });
   };
+  // Prune here, not at fetch time: restock data can arrive before Ariedam /data (eligibility) has loaded,
+  // and this runs again once it does. The cache keeps unpruned rows.
   const rebuildAllData = () => {
-    allData = [...mergeWeatherShopFallbackRows(mergeToolFallbackRows(shopData)), ...weatherRows];
+    const shopRows = pruneStaleShopTypeRows(shopData);
+    allData = [...mergeWeatherShopFallbackRows(mergeToolFallbackRows(shopRows)), ...weatherRows];
+    if (lastLoad && !loading) { // don't overwrite "Refreshing…" if /data lands mid-refresh
+      const { stale } = lastLoad;
+      toolbar.setStatus(`Tracking ${shopRows.length} items${stale ? ' (cached — refresh failed)' : ''}`, stale ? 'stale' : 'ok');
+    }
     scheduleRender(true, true);
   };
 
@@ -104,11 +114,11 @@ export async function initApp() {
       shopData = restock.items;
       weatherRows = weatherPredictionsAsRestockItems(weather);
       fetchedAt = restock.fetchedAt;
-      const stale = restock.fromCache && restock.error;
-      toolbar.setStatus(`Tracking ${shopData.length} items${stale ? ' (cached — refresh failed)' : ''}`, stale ? 'stale' : 'ok');
+      lastLoad = { stale: !!(restock.fromCache && restock.error) };
       toolbar.setUpdated(fetchedAt);
     } catch (err) {
       console.error('[restock] load failed', err);
+      lastLoad = null;
       toolbar.setStatus('Error loading data', 'error');
       toolbar.setUpdated(null, err?.message ?? 'Unknown error');
     } finally {
@@ -124,6 +134,13 @@ export async function initApp() {
 
   const gameDataReady = loadGameData().then((data) => {
     buildItemMetaCache(data);
+    // Pins whose shop was reshuffled would otherwise vanish with the pruned row.
+    const remapped = remapStalePins(tracked);
+    if (remapped.changed) {
+      tracked.clear();
+      for (const key of remapped.set) tracked.add(key);
+      saveTracked(tracked);
+    }
     rebuildAllData();
   });
   void refreshLiveWeather();

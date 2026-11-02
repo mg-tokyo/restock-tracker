@@ -14,9 +14,15 @@ const DATA = {
   items: {
     Shovel: { name: 'Shovel', rarity: 'Common', coinPrice: 1000, sprite: 'https://x/items/Shovel.png', eligibleShops: ['Tool'] },
     XPShard: { name: 'XP Shard', rarity: 'Rare', magicDustPrice: 30, sprite: 'https://x/items/XPShard.png', eligibleShops: ['Amber'] },
+    ReplenishPotion: { name: 'Hunger Potion', rarity: 'Rare', coinPrice: null, dustPrice: 250, sprite: 'https://x/items/ReplenishPotion.png', eligibleShops: ['Tool'] },
+    Camera: { name: 'Camera', rarity: 'Common', coinPrice: 1000, eligibleShops: [] },
+    CarvingKnife: { name: 'Carving Knife', rarity: 'Rare', coinPrice: 500, eligibleShops: ['Spooky'], expiryDate: '2026-11-10T00:00:00.000Z' },
     DawnCapsule: { name: 'Dawn Capsule', coinPrice: 0 },
   },
-  decor: { WoodFrog: { name: 'Wood Frog', rarity: 'Rare', coinPrice: 2000, sprite: 'https://x/decor/WoodFrog.png', eligibleShops: ['Rain', 'Decor'] } },
+  decor: {
+    WoodFrog: { name: 'Wood Frog', rarity: 'Rare', coinPrice: 2000, sprite: 'https://x/decor/WoodFrog.png', eligibleShops: ['Rain', 'Decor'] },
+    DecorShed: { name: 'Decor Shed', rarity: 'Divine', coinPrice: null, dustPrice: 10000, sprite: 'https://x/decor/DecorShed.png', eligibleShops: ['Tool'] },
+  },
 };
 
 beforeEach(() => {
@@ -30,7 +36,10 @@ test('meta lookup incl. tools with dust price and weather-shop cross-family look
   assert.equal(meta.getItemPrice('Shovel', 'tool'), 1000);
   assert.equal(meta.getItemDustPrice('XPShard', 'tool'), 30);
   assert.equal(meta.getItemPrice('XPShard', 'tool'), 0);
-  assert.equal(meta.getItemMeta('DawnCapsule', 'tool'), null);
+  // Unpriced catalog items still resolve a name via the catalog, but carry no price.
+  assert.equal(meta.getItemName('DawnCapsule', 'tool'), 'Dawn Capsule');
+  assert.equal(meta.getItemPrice('DawnCapsule', 'tool'), 0);
+  assert.equal(meta.getItemDustPrice('DawnCapsule', 'tool'), 0);
   assert.equal(meta.getItemName('SnowEgg', 'snow'), 'Snow Egg');
   assert.equal(meta.getItemRarity('SnowEgg', 'snow'), 'rare');
   assert.equal(meta.getItemName('Unknown', 'seed'), 'Unknown');
@@ -55,7 +64,11 @@ test('fallback rows for tools and weather shops', () => {
   const rows = meta.mergeWeatherShopFallbackRows(meta.mergeToolFallbackRows([]));
   const keys = rows.map((r) => `${r.shop_type}:${r.item_id}`);
   assert.ok(keys.includes('tool:Shovel'));
-  assert.ok(keys.includes('tool:XPShard'));
+  assert.ok(keys.includes('tool:ReplenishPotion'));
+  assert.ok(keys.includes('tool:DecorShed'));
+  assert.ok(!keys.includes('tool:XPShard'), 'Amber-only item is not a Tools row');
+  assert.ok(!keys.includes('tool:Camera'), 'eligibleShops [] is not a Tools row');
+  assert.ok(!keys.includes('tool:CarvingKnife'));
   assert.ok(keys.includes('dawn:Daisy'));
   assert.ok(keys.includes('snow:SnowEgg'));
   assert.ok(keys.includes('rain:WoodFrog'));
@@ -92,4 +105,31 @@ test('sprite urls fall through catalog families when shop and family diverge', (
   assert.equal(meta.getSpriteUrl({ item_id: 'DecorShed', shop_type: 'tool' }), 'https://x/decor/DecorShed.png');
   assert.equal(meta.getSpriteUrl({ item_id: 'PlanterPot', shop_type: 'decor' }), 'https://x/items/PlanterPot.png');
   assert.equal(meta.getSpriteUrl({ item_id: 'StringLights', shop_type: 'seed' }), 'https://x/decor/StringLights.png');
+});
+
+test('dustPrice is read for items (Ariedam field name)', () => {
+  assert.equal(meta.getItemName('ReplenishPotion', 'tool'), 'Hunger Potion');
+  assert.equal(meta.getItemDustPrice('ReplenishPotion', 'tool'), 250);
+  assert.equal(meta.getItemPrice('ReplenishPotion', 'tool'), 0);
+  assert.equal(meta.getItemRarity('ReplenishPotion', 'tool'), 'rare');
+});
+
+test('tool-shop items filed under another Ariedam family resolve via the catalog', () => {
+  assert.equal(meta.getItemName('DecorShed', 'tool'), 'Decor Shed');
+  assert.equal(meta.getItemRarity('DecorShed', 'tool'), 'divine');
+  assert.equal(meta.getItemPrice('DecorShed', 'tool'), 0);
+  assert.equal(meta.getItemDustPrice('DecorShed', 'tool'), 10000);
+  assert.equal(meta.getItemName('Mystery', 'tool'), 'Mystery');
+});
+
+test('catalog expiry: date, null when catalog has none, undefined when unknown', () => {
+  assert.equal(meta.getItemExpiry('CarvingKnife'), Date.parse('2026-11-10T00:00:00.000Z'));
+  assert.equal(meta.getItemExpiry('Carrot'), null);
+  assert.equal(meta.getItemExpiry('Mystery'), undefined);
+});
+
+test('no weather-shop fallback rows or lock badges before eligibility loads', () => {
+  buildEligibility(null);
+  assert.deepEqual(meta.mergeWeatherShopFallbackRows([]), []);
+  assert.equal(meta.getRequiredWeather('SnowEgg'), null);
 });
